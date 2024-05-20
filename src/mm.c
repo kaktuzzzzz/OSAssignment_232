@@ -124,11 +124,34 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
   {
     if(MEMPHY_get_freefp(caller->mram, &fpn) == 0)
    {
-     
-   } else {  // ERROR CODE of obtaining somes but not enough frames
+      struct framephy_struct *newfr = malloc(sizeof(struct framephy_struct));
+      newfr->fpn = fpn;
+      newfr->fp_next = *frm_lst;
+      *frm_lst = newfr;
+
+   } else { 
+       // ERROR CODE of obtaining somes but not enough frames
+      int vicpgn, vicfpn, swpfpn;
+      int check_victim_found = find_victim_page(caller->mm, &vicpgn);
+      if(check_victim_found == -1){
+        fprintf(stderr, "No victim page found. \n");
+        return -3000;
+      }
+
+      vicfpn = PAGING_FPN(caller->mm->pgd[vicpgn]);
+      int check_free_fp = MEMPHY_get_freefp(caller->active_mswp, &swpfpn);
+      if(check_free_fp == -1){
+        fprintf(stderr, "No free frame in SWAP found. \n");
+        return -3000;
+      }
+      __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
+      struct framephy_struct *newfr = malloc(sizeof(struct framephy_struct));
+      newfr->fpn = fpn;
+      newfr->fp_next = *frm_lst;
+      *frm_lst = newfr;
+
    } 
  }
-
   return 0;
 }
 
@@ -248,11 +271,19 @@ int enlist_vm_rg_node(struct vm_rg_struct **rglist, struct vm_rg_struct* rgnode)
 int enlist_pgn_node(struct pgn_t **plist, int pgn)
 {
   struct pgn_t* pnode = malloc(sizeof(struct pgn_t));
-
   pnode->pgn = pgn;
-  pnode->pg_next = *plist;
+  pnode->pg_next = NULL;
+  if(*plist == NULL){
+    *plist = pnode;
+    return 0;
+  }
+  struct pgn_t *node;
+  node = *plist;
+  while(node->pg_next!=NULL){
+    node = node->pg_next;
+  }
+  node->pg_next = pnode;
   *plist = pnode;
-
   return 0;
 }
 
