@@ -42,8 +42,8 @@ int tlballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
   int addr, val;
 
   /* By default using vmaid = 0 */
-  val = __alloc(proc, 1, reg_index, size, &addr);
-
+  val = __alloc(proc, 0, reg_index, size, &addr);
+  print_pgtbl(proc, proc->mm->mmap->vm_start, proc->mm->mmap->vm_end);
   /* TODO update TLB CACHED frame num of the new allocated page(s)*/
   /* by using tlb_cache_read()/tlb_cache_write()*/
 
