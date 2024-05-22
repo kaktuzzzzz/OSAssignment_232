@@ -129,6 +129,7 @@ static void * ld_routine(void * args) {
 		proc->mram = mram;
 		proc->mswp = mswp;
 		proc->active_mswp = active_mswp;
+		proc->tlb = ((struct mmpaging_ld_args *)args)->tlb;
 #endif
 // #ifdef MLQ_SCHED
 		printf("\tLoaded a process at %s, PID: %d PRIO: %lu\n",

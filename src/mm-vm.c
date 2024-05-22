@@ -210,6 +210,9 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
       __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, emptyfpn);
       MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
       pte_set_fpn(&caller->mm->pgd[pgn], emptyfpn);
+#ifdef CPU_TLB
+      tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+#endif
     }
     else{
     /* TODO: Play with your paging theory here */
@@ -233,11 +236,13 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
       pte_set_fpn(&caller->mm->pgd[pgn], vicfpn) ;
     // & mm->pgd[pgn];
     // pte_set_fpn(&pte, tgtfpn);
-    }
 #ifdef CPU_TLB
     /* Update its online status of TLB (if needed) */
+    tlb_cache_write(&caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
+    tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
 #endif
 
+    }
       enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
   }
 

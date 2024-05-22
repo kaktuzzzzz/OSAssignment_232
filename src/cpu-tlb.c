@@ -46,7 +46,17 @@ int tlballoc(struct pcb_t *proc, uint32_t size, uint32_t reg_index)
   print_pgtbl(proc, proc->mm->mmap->vm_start, proc->mm->mmap->vm_end);
   /* TODO update TLB CACHED frame num of the new allocated page(s)*/
   /* by using tlb_cache_read()/tlb_cache_write()*/
-
+  if(val == -1){
+    return -1;
+  }
+  unsigned long region_start = proc->mm->symrgtbl[reg_index].rg_start;
+  unsigned long region_end = proc->mm->symrgtbl[reg_index].rg_end;
+  int first_pgn = region_start/PAGING_PAGESZ;
+  int last_pgn = region_end/PAGING_PAGESZ;
+  for(int i = first_pgn; i <= last_pgn; i++){
+    int32_t pte = proc->mm->pgd[i];
+    tlb_cache_write(proc->tlb, proc->pid, i, pte);
+  }
   return val;
 }
 

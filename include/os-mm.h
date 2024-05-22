@@ -58,6 +58,12 @@ struct mm_struct {
    /* list of free page */
    struct pgn_t *fifo_pgn;
 };
+/*TLB management*/
+struct tlb_entry{
+      uint32_t pid;
+      uint32_t tag;
+      uint32_t pte;
+};
 
 /*
  * FRAME/MEM PHY struct
@@ -82,6 +88,9 @@ struct memphy_struct {
    /* Management structure */
    struct framephy_struct *free_fp_list;
    struct framephy_struct *used_fp_list;
+
+   struct tlb_entry *tlb_entries;
+   uint32_t tlb_entries_num;
 };
 
 #endif

@@ -29,12 +29,23 @@
  *  @pgnum: page number
  *  @value: obtained value
  */
-int tlb_cache_read(struct memphy_struct * mp, int pid, int pgnum, BYTE value)
+int tlb_cache_read(struct memphy_struct * mp, int pid, int pgnum, uint32_t * pte)
 {
    /* TODO: the identify info is mapped to 
     *      cache line by employing:
     *      direct mapped, associated mapping etc.
     */
+   uint32_t tlb_entries_num = mp->tlb_entries_num;
+   int index = pgnum % tlb_entries_num;
+   int tag = pgnum / tlb_entries_num;
+   if(mp->tlb_entries[index].pid != pid){
+      return -1;
+   }
+   if(mp->tlb_entries[index].tag != tag){
+      return -1;
+   }
+   uint32_t mp_pte = mp->tlb_entries[index].pte;
+   *pte = mp_pte;
    return 0;
 }
 
@@ -45,12 +56,21 @@ int tlb_cache_read(struct memphy_struct * mp, int pid, int pgnum, BYTE value)
  *  @pgnum: page number
  *  @value: obtained value
  */
-int tlb_cache_write(struct memphy_struct *mp, int pid, int pgnum, BYTE value)
+int tlb_cache_write(struct memphy_struct *mp, int pid, int pgnum, uint32_t pte)
 {
    /* TODO: the identify info is mapped to 
     *      cache line by employing:
     *      direct mapped, associated mapping etc.
+    * 
+    * 
     */
+   uint32_t tlb_entries_num = mp->tlb_entries_num;
+   int index = pgnum % tlb_entries_num;
+   int tag = pgnum / tlb_entries_num;
+   mp->tlb_entries[index].pid = pid;
+   mp->tlb_entries[index].tag = tag;
+   mp->tlb_entries[index].pte = pte;
+
    return 0;
 }
 
@@ -101,6 +121,7 @@ int TLBMEMPHY_dump(struct memphy_struct * mp)
     *     for tracing the memory content
     */
 
+
    return 0;
 }
 
@@ -111,8 +132,9 @@ int TLBMEMPHY_dump(struct memphy_struct * mp)
 int init_tlbmemphy(struct memphy_struct *mp, int max_size)
 {
    mp->storage = (BYTE *)malloc(max_size*sizeof(BYTE));
+   mp->tlb_entries = (struct tlb_entry *)malloc(max_size / 12 * sizeof(struct tlb_entry));
    mp->maxsz = max_size;
-
+   mp->tlb_entries_num = max_size / 12;
    mp->rdmflg = 1;
 
    return 0;
