@@ -196,58 +196,119 @@ int pgfree_data(struct pcb_t *proc, uint32_t reg_index)
  */
 int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
 {
-  uint32_t pte = mm->pgd[pgn];
-  
-  if (!PAGING_PAGE_PRESENT(pte))
-  { /* Page is not online, make it actively living */
-    int vicpgn, swpfpn,emptyfpn;
-    // int vicfpn;
-    // uint32_t vicpte;
-    // int tgtfpn = PAGING_SWP(pte); // the target frame storing our variable
-    int tgtfpn = PAGING_FPN(pte);
-    if(MEMPHY_get_freefp(caller->mram, &emptyfpn) == 0){
-      
-      __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, emptyfpn);
-      MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
-      pte_set_fpn(&caller->mm->pgd[pgn], emptyfpn);
+  uint32_t tlb_pte;
+  // if in TLB
+  if(tlb_cache_read(caller->tlb, caller->pid, pgn, &tlb_pte) == 0){
+    // if not in RAM
+    if (!PAGING_PAGE_PRESENT(tlb_pte)){ 
+      /* Page is not online, make it actively living */
+        int vicpgn, swpfpn, emptyfpn;
+      // int vicfpn;
+      // uint32_t vicpte;
+      // int tgtfpn = PAGING_SWP(pte); // the target frame storing our variable
+        int tgtfpn = PAGING_FPN(tlb_pte);
+        //if RAM has space
+        if(MEMPHY_get_freefp(caller->mram, &emptyfpn) == 0){
+          __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, emptyfpn);
+          MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
+          // update the pgd
+          pte_set_fpn(&caller->mm->pgd[pgn], emptyfpn);
 #ifdef CPU_TLB
+        // after being pushed to RAM, update the TLB
+        // because just 1 page is edited
+          tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+#endif
+      }
+      // RAM has no spaces
+      else{
+        /* TODO: Play with your paging theory here */
+        /* Find victim page */
+          find_victim_page(caller->mm, &vicpgn);
+          int vicfpn = PAGING_FPN(caller->mm->pgd[vicpgn]);
+        /* Get free frame in MEMSWP */
+          MEMPHY_get_freefp(caller->active_mswp, &swpfpn);
+
+        /* Do swap frame from MEMRAM to MEMSWP and vice versa*/
+        /* Copy victim frame to swap */
+          __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
+        /* Copy target frame from swap to mem */
+          __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
+
+        /* Update page table */
+          pte_set_swap_fpn(&caller->mm->pgd[vicpgn], swpfpn) ;
+        // &mm->pgd;
+
+        /* Update its online status of the target page */
+          pte_set_fpn(&caller->mm->pgd[pgn], vicfpn) ;
+        // & mm->pgd[pgn];
+        // pte_set_fpn(&pte, tgtfpn);
+          MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
+    #ifdef CPU_TLB
+        /* Update its online status of TLB (if needed) */
+        uint32_t pte_check;
+        if(tlb_cache_read(caller->tlb, caller->pid, vicpgn, &pte_check) == 0){
+          tlb_cache_write(&caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
+        }
+        tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+    #endif
+        }
+          enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
+      }
+    }
+    // not in TLB
+  else{
+    uint32_t pte = mm->pgd[pgn];
+    if (!PAGING_PAGE_PRESENT(pte)){ 
+      /* Page is not online, make it actively living */
+      int vicpgn, swpfpn,emptyfpn;
+      // int vicfpn;
+      // uint32_t vicpte;
+      // int tgtfpn = PAGING_SWP(pte); // the target frame storing our variable
+      int tgtfpn = PAGING_FPN(pte);
+      if(MEMPHY_get_freefp(caller->mram, &emptyfpn) == 0){
+        __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, emptyfpn);
+        MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
+        pte_set_fpn(&caller->mm->pgd[pgn], emptyfpn);
+  #ifdef CPU_TLB
+        tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+  #endif
+      }
+      else{
+      /* TODO: Play with your paging theory here */
+      /* Find victim page */
+        find_victim_page(caller->mm, &vicpgn);
+        int vicfpn = PAGING_FPN(caller->mm->pgd[vicpgn]);
+      /* Get free frame in MEMSWP */
+        MEMPHY_get_freefp(caller->active_mswp, &swpfpn);
+      /* Do swap frame from MEMRAM to MEMSWP and vice versa*/
+      /* Copy victim frame to swap */
+        __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
+      /* Copy target frame from swap to mem */
+        __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
+
+      /* Update page table */
+        pte_set_swap_fpn(&caller->mm->pgd[vicpgn], swpfpn) ;
+      // &mm->pgd;
+      /* Update its online status of the target page */
+        pte_set_fpn(&caller->mm->pgd[pgn], vicfpn) ;
+      // & mm->pgd[pgn];
+      // pte_set_fpn(&pte, tgtfpn);
+        MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
+  #ifdef CPU_TLB
+      /* Update its online status of TLB (if needed) */
+      uint32_t pte_check;
+      if(tlb_cache_read(caller->tlb, caller->pid, vicpgn, &pte_check) == 0){
+        tlb_cache_write(&caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
+      }
       tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
-#endif
+  #endif
+      }
+        enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
     }
-    else{
-    /* TODO: Play with your paging theory here */
-    /* Find victim page */
-      find_victim_page(caller->mm, &vicpgn);
-    int vicfpn = PAGING_FPN(vicpgn);
-    /* Get free frame in MEMSWP */
-      MEMPHY_get_freefp(caller->active_mswp, &swpfpn);
-
-    /* Do swap frame from MEMRAM to MEMSWP and vice versa*/
-    /* Copy victim frame to swap */
-      __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
-    /* Copy target frame from swap to mem */
-      __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
-
-    /* Update page table */
-      pte_set_swap_fpn(&caller->mm->pgd[vicpgn], swpfpn) ;
-    // &mm->pgd;
-
-    /* Update its online status of the target page */
-      pte_set_fpn(&caller->mm->pgd[pgn], vicfpn) ;
-    // & mm->pgd[pgn];
-    // pte_set_fpn(&pte, tgtfpn);
-#ifdef CPU_TLB
-    /* Update its online status of TLB (if needed) */
-    tlb_cache_write(&caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
     tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
-#endif
-
-    }
-      enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
+   
   }
-
-  *fpn = PAGING_FPN(pte);
-
+   *fpn = PAGING_FPN(caller->tlb->tlb_entries[pgn].pte);
   return 0;
 }
 
