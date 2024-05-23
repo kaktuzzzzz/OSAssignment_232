@@ -75,7 +75,7 @@ struct vm_rg_struct *get_symrg_byid(struct mm_struct *mm, int rgid)
 {
   if (rgid < 0 || rgid > PAGING_MAX_SYMTBL_SZ)
     return NULL;
-
+  if (mm->symrgtbl[rgid].rg_start == mm->symrgtbl[rgid].rg_end) return NULL;
   return &mm->symrgtbl[rgid];
 }
 
@@ -194,12 +194,13 @@ int pgfree_data(struct pcb_t *proc, uint32_t reg_index)
  *@caller: caller
  *
  */
-int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
+int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller, int *frmnum)
 {
   uint32_t tlb_pte;
   // if in TLB
   if(tlb_cache_read(caller->tlb, caller->pid, pgn, &tlb_pte) == 0){
     // if not in RAM
+    *frmnum = 0;
     if (!PAGING_PAGE_PRESENT(tlb_pte)){ 
       /* Page is not online, make it actively living */
         int vicpgn, swpfpn, emptyfpn;
@@ -216,7 +217,7 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
 #ifdef CPU_TLB
         // after being pushed to RAM, update the TLB
         // because just 1 page is edited
-          tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+          tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
 #endif
       }
       // RAM has no spaces
@@ -247,9 +248,9 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
         /* Update its online status of TLB (if needed) */
         uint32_t pte_check;
         if(tlb_cache_read(caller->tlb, caller->pid, vicpgn, &pte_check) == 0){
-          tlb_cache_write(&caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
+          tlb_cache_write(caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
         }
-        tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+        tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
     #endif
         }
           enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
@@ -270,7 +271,7 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
         MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
         pte_set_fpn(&caller->mm->pgd[pgn], emptyfpn);
   #ifdef CPU_TLB
-        tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+        tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
   #endif
       }
       else{
@@ -298,14 +299,14 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
       /* Update its online status of TLB (if needed) */
       uint32_t pte_check;
       if(tlb_cache_read(caller->tlb, caller->pid, vicpgn, &pte_check) == 0){
-        tlb_cache_write(&caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
+        tlb_cache_write(caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
       }
-      tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+      tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
   #endif
       }
         enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
     }
-    tlb_cache_write(&caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+    tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
    
   }
    *fpn = PAGING_FPN(caller->tlb->tlb_entries[pgn].pte);
@@ -318,14 +319,14 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
  *@value: value
  *
  */
-int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller, int frmnum)
+int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller, int *frmnum)
 {
   int pgn = PAGING_PGN(addr);
   int off = PAGING_OFFST(addr);
   int fpn;
 
   /* Get the page to MEMRAM, swap from MEMSWAP if needed */
-  if (pg_getpage(mm, pgn, &fpn, caller) != 0)
+  if (pg_getpage(mm, pgn, &fpn, caller, frmnum) != 0)
     return -1; /* invalid page access */
 
   int phyaddr = (fpn << PAGING_ADDR_FPN_LOBIT) + off;
@@ -341,17 +342,17 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller, 
  *@value: value
  *
  */
-int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller, int frmnum)
+int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller, int *frmnum)
 {
   int pgn = addr / PAGING_PAGESZ;
   int off = addr - pgn * PAGING_PAGESZ;
-  
+  int fpn;
 
   /* Get the page to MEMRAM, swap from MEMSWAP if needed */
-  if (pg_getpage(mm, pgn, &frmnum, caller) != 0)
+  if (pg_getpage(mm, pgn, &fpn, caller, frmnum) != 0)
     return -1; /* invalid page access */
 
-  int phyaddr = (frmnum << PAGING_ADDR_FPN_LOBIT) + off;
+  int phyaddr = (fpn << PAGING_ADDR_FPN_LOBIT) + off;
 
   MEMPHY_write(caller->mram, phyaddr, value);
 
@@ -366,16 +367,15 @@ int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller, 
  *@size: allocated size
  *
  */
-int __read(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE *data, int frmnum)
+int __read(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE *data, int *frmnum)
 {
   struct vm_rg_struct *currg = get_symrg_byid(caller->mm, rgid);
-
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
 
   if (currg == NULL || cur_vma == NULL) /* Invalid memory identify */
     return -1;
 
-  pg_getval(caller->mm, currg->rg_start + offset, data, caller, &frmnum);
+  pg_getval(caller->mm, currg->rg_start + offset, data, caller, frmnum);
 
   return 0;
 }
@@ -389,7 +389,7 @@ int pgread(
 {
   BYTE data;
   int frmnum;
-  int val = __read(proc, 0, source, offset, &data, &frmnum);
+  int val = __read(proc, 0, source, offset, &data,&frmnum);
 
   destination = (uint32_t)data;
 #ifdef IODUMP
@@ -411,16 +411,15 @@ int pgread(
  *@size: allocated size
  *
  */
-int __write(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE value, int frmnum)
+int __write(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE value, int* frmnum)
 {
   struct vm_rg_struct *currg = get_symrg_byid(caller->mm, rgid);
-
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
 
   if (currg == NULL || cur_vma == NULL) /* Invalid memory identify */
     return -1;
   
-  pg_setval(caller->mm, currg->rg_start + offset, value, caller, &frmnum);
+  pg_setval(caller->mm, currg->rg_start + offset, value, caller, frmnum);
 
   return 0;
 }

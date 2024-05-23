@@ -85,12 +85,17 @@ int tlbfree_data(struct pcb_t *proc, uint32_t reg_index)
 int tlbread(struct pcb_t * proc, uint32_t source,
             uint32_t offset, 	uint32_t destination) 
 {
-  BYTE data, frmnum = -1;
-	
+  BYTE data;
+  int frmnum = -1;
+  int val = __read(proc, 0, source, offset, &data, &frmnum);
+  /* by using tlb_cache_read()/tlb_cache_write()*/
   /* TODO retrieve TLB CACHED frame num of accessing page(s)*/
   /* by using tlb_cache_read()/tlb_cache_write()*/
   /* frmnum is return value of tlb_cache_read/write value*/
-	int val = __read(proc, 0, source, offset, &data, &frmnum);
+  if(val == -1){
+    printf("No region found or no vm_area found.\n");
+    return -1;
+  }
 #ifdef IODUMP
   if (frmnum >= 0)
     printf("TLB hit at read region=%d offset=%d\n", 
@@ -103,14 +108,10 @@ int tlbread(struct pcb_t * proc, uint32_t source,
 #endif
   MEMPHY_dump(proc->mram);
 #endif
-
   // int val = __read(proc, 0, source, offset, &data);
-
   destination = (uint32_t) data;
-
   /* TODO update TLB CACHED with frame num of recent accessing page(s)*/
   /* by using tlb_cache_read()/tlb_cache_write()*/
-
   return val;
 }
 
@@ -124,12 +125,16 @@ int tlbwrite(struct pcb_t * proc, BYTE data,
              uint32_t destination, uint32_t offset)
 {
   int val;
-  BYTE frmnum = -1;
+  int frmnum = -1;
+  
   val = __write(proc, 0, destination, offset, data, &frmnum);
   /* TODO retrieve TLB CACHED frame num of accessing page(s))*/
   /* by using tlb_cache_read()/tlb_cache_write()
   frmnum is return value of tlb_cache_read/write value*/
-
+  if(val == -1){
+    printf("No region found or no vm_area found.\n");
+    return -1;
+  }
 #ifdef IODUMP
   if (frmnum >= 0)
     printf("TLB hit at write region=%d offset=%d value=%d\n",

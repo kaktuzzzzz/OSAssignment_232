@@ -121,6 +121,16 @@ int TLBMEMPHY_dump(struct memphy_struct * mp)
     *     for tracing the memory content
     */
 
+   struct tlb_entry *tlb = mp->tlb_entries;
+   uint32_t i;
+   for(i = 0; i < mp->tlb_entries_num; i++){
+      if(tlb[i].pid == 0){
+         printf("0 0 0");
+      }
+      else{
+         printf("%lu %lu %lu", tlb[i].pid, tlb[i].tag, tlb[i].pte);
+      }
+   }
 
    return 0;
 }
