@@ -19,7 +19,7 @@
 
 #include "mm.h"
 #include <stdlib.h>
-
+#include <stdio.h>
 #define init_tlbcache(mp,sz,...) init_memphy(mp, sz, (1, ##__VA_ARGS__))
 
 /*
@@ -128,10 +128,9 @@ int TLBMEMPHY_dump(struct memphy_struct * mp)
          printf("0 0 0");
       }
       else{
-         printf("%lu %lu %lu", tlb[i].pid, tlb[i].tag, tlb[i].pte);
+         printf("%u %u %u", tlb[i].pid, tlb[i].tag, tlb[i].pte);
       }
    }
-
    return 0;
 }
 

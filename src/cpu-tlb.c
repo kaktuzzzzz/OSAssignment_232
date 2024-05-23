@@ -28,7 +28,21 @@ int tlb_change_all_page_tables_of(struct pcb_t *proc,  struct memphy_struct * mp
 int tlb_flush_tlb_of(struct pcb_t *proc, struct memphy_struct * mp)
 {
   /* TODO flush tlb cached*/
-
+  if(!proc){
+    return -1;
+  }
+  uint32_t id = proc->pid;
+  struct tlb_entry *tlb = mp->tlb_entries;
+  uint32_t tlb_entries_num = mp->tlb_entries_num;
+  uint32_t i;
+  for(i = 0; i< tlb_entries_num; i++){
+    if(tlb[i].pid != id){
+        continue;
+    }
+    tlb[i].pid = 0;
+    tlb[i].tag = 0;
+    tlb[i].pte = 0; 
+  }
   return 0;
 }
 
