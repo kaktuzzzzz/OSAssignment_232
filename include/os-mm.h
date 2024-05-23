@@ -5,6 +5,7 @@
 #define PAGING_MAX_MMSWP 4 /* max number of supported swapped space */
 #define PAGING_MAX_SYMTBL_SZ 30
 #include <stdbool.h>
+#include <bits/pthreadtypes.h>
 typedef char BYTE;
 typedef uint32_t addr_t;
 //typedef unsigned int uint32_t;
@@ -91,6 +92,8 @@ struct memphy_struct {
 
    struct tlb_entry *tlb_entries;
    uint32_t tlb_entries_num;
+
+   pthread_mutex_t lock_memphy;
 };
 
 #endif
