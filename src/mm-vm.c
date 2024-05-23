@@ -318,7 +318,7 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
  *@value: value
  *
  */
-int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller)
+int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller, int frmnum)
 {
   int pgn = PAGING_PGN(addr);
   int off = PAGING_OFFST(addr);
@@ -341,17 +341,17 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller)
  *@value: value
  *
  */
-int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller)
+int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller, int frmnum)
 {
   int pgn = addr / PAGING_PAGESZ;
   int off = addr - pgn * PAGING_PAGESZ;
-  int fpn;
+  
 
   /* Get the page to MEMRAM, swap from MEMSWAP if needed */
-  if (pg_getpage(mm, pgn, &fpn, caller) != 0)
+  if (pg_getpage(mm, pgn, &frmnum, caller) != 0)
     return -1; /* invalid page access */
 
-  int phyaddr = (fpn << PAGING_ADDR_FPN_LOBIT) + off;
+  int phyaddr = (frmnum << PAGING_ADDR_FPN_LOBIT) + off;
 
   MEMPHY_write(caller->mram, phyaddr, value);
 
@@ -366,7 +366,7 @@ int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller)
  *@size: allocated size
  *
  */
-int __read(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE *data)
+int __read(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE *data, int frmnum)
 {
   struct vm_rg_struct *currg = get_symrg_byid(caller->mm, rgid);
 
@@ -375,7 +375,7 @@ int __read(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE *data)
   if (currg == NULL || cur_vma == NULL) /* Invalid memory identify */
     return -1;
 
-  pg_getval(caller->mm, currg->rg_start + offset, data, caller);
+  pg_getval(caller->mm, currg->rg_start + offset, data, caller, &frmnum);
 
   return 0;
 }
@@ -388,7 +388,8 @@ int pgread(
     uint32_t destination)
 {
   BYTE data;
-  int val = __read(proc, 0, source, offset, &data);
+  int frmnum;
+  int val = __read(proc, 0, source, offset, &data, &frmnum);
 
   destination = (uint32_t)data;
 #ifdef IODUMP
@@ -410,7 +411,7 @@ int pgread(
  *@size: allocated size
  *
  */
-int __write(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE value)
+int __write(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE value, int frmnum)
 {
   struct vm_rg_struct *currg = get_symrg_byid(caller->mm, rgid);
 
@@ -418,8 +419,8 @@ int __write(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE value)
 
   if (currg == NULL || cur_vma == NULL) /* Invalid memory identify */
     return -1;
-
-  pg_setval(caller->mm, currg->rg_start + offset, value, caller);
+  
+  pg_setval(caller->mm, currg->rg_start + offset, value, caller, &frmnum);
 
   return 0;
 }
@@ -438,8 +439,8 @@ int pgwrite(
 #endif
   MEMPHY_dump(proc->mram);
 #endif
-
-  return __write(proc, 0, destination, offset, data);
+  int frmnum;
+  return __write(proc, 0, destination, offset, data, &frmnum);
 }
 
 /*free_pcb_memphy - collect all memphy of pcb
