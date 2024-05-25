@@ -55,15 +55,26 @@ static void * cpu_routine(void * args) {
 	int time_left = 0;
 	struct pcb_t * proc = NULL;
 	while (1) {
+		// if (proc == NULL && done) {
+		// 	/* No process to run, exit */
+		// 	printf("\tCPU %d stopped\n", id);
+		// 	break;
+		// }
 		/* Check the status of current process */
 		if (proc == NULL) {
 			/* No process is running, the we load new process from
 		 	* ready queue */
 			proc = get_proc();
+			
 			if (proc == NULL) {
-                           next_slot(timer_id);
-                           continue; /* First load failed. skip dummy load */
-                        }
+				if(done) {
+			/* No process to run, exit */
+				printf("\tCPU %d stopped\n", id);
+				break;
+				}
+                next_slot(timer_id);
+                continue; /* First load failed. skip dummy load */
+            }
 		}else if (proc->pc == proc->code->size) {
 			/* The porcess has finish it job */
 			printf("\tCPU %d: Processed %2d has finished\n",

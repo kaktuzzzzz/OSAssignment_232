@@ -206,8 +206,8 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller, in
         int vicpgn, swpfpn, emptyfpn;
       // int vicfpn;
       // uint32_t vicpte;
-      // int tgtfpn = PAGING_SWP(pte); // the target frame storing our variable
-        int tgtfpn = PAGING_FPN(tlb_pte);
+      // int tgtfpn = PAGING_SWP(pte);
+        int tgtfpn = PAGING_FPN(tlb_pte); // the target frame storing our variable
         //if RAM has space
         if(MEMPHY_get_freefp(caller->mram, &emptyfpn) == 0){
           __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, emptyfpn);
@@ -219,9 +219,9 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller, in
         // because just 1 page is edited
           tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
 #endif
-      }
+        }
       // RAM has no spaces
-      else{
+        else{
         /* TODO: Play with your paging theory here */
         /* Find victim page */
           find_victim_page(caller->mm, &vicpgn);
