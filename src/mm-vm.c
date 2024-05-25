@@ -18,8 +18,8 @@ int enlist_vm_freerg_list(struct mm_struct *mm, struct vm_rg_struct rg_elmt)
 {
   struct vm_rg_struct *new_rg = malloc(sizeof(struct vm_rg_struct));
   struct vm_rg_struct *rg_node = mm->mmap->vm_freerg_list;
-  new_rg ->rg_start = rg_elmt.rg_start;
-  new_rg ->rg_end = rg_elmt.rg_end;
+  new_rg->rg_start = rg_elmt.rg_start;
+  new_rg->rg_end = rg_elmt.rg_end;
 
   if (rg_elmt.rg_start >= rg_elmt.rg_end)
     return -1;
@@ -27,10 +27,12 @@ int enlist_vm_freerg_list(struct mm_struct *mm, struct vm_rg_struct rg_elmt)
   if (rg_node != NULL)
     rg_elmt.rg_next = rg_node;
 
-  if(rg_node != NULL){
+  if (rg_node != NULL)
+  {
     new_rg->rg_next = mm->mmap->vm_freerg_list;
   }
-  else{
+  else
+  {
     new_rg->rg_next = NULL;
   }
   /* Enlist the new region */
@@ -75,7 +77,8 @@ struct vm_rg_struct *get_symrg_byid(struct mm_struct *mm, int rgid)
 {
   if (rgid < 0 || rgid > PAGING_MAX_SYMTBL_SZ)
     return NULL;
-  if (mm->symrgtbl[rgid].rg_start == mm->symrgtbl[rgid].rg_end) return NULL;
+  if (mm->symrgtbl[rgid].rg_start == mm->symrgtbl[rgid].rg_end)
+    return NULL;
   return &mm->symrgtbl[rgid];
 }
 
@@ -112,13 +115,14 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     // printf("get here\n");
     return -1;
   }
-    
+
   // int inc_sz = PAGING_PAGE_ALIGNSZ(size);
   // int inc_limit_ret
   int old_sbrk;
 
   old_sbrk = cur_vma->sbrk;
-  if(old_sbrk + size <= cur_vma->vm_end){
+  if (old_sbrk + size <= cur_vma->vm_end)
+  {
     cur_vma->sbrk += size;
     caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
     caller->mm->symrgtbl[rgid].rg_end = old_sbrk + size;
@@ -126,16 +130,17 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   /* TODO INCREASE THE LIMIT
    * inc_vma_limit(caller, vmaid, inc_sz)
    */
-  else{
-  inc_vma_limit(caller, vmaid, size);
+  else
+  {
+    inc_vma_limit(caller, vmaid, size);
 
-  /*Successful increase limit */
-  caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
-  caller->mm->symrgtbl[rgid].rg_end = old_sbrk + size;
+    /*Successful increase limit */
+    caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
+    caller->mm->symrgtbl[rgid].rg_end = old_sbrk + size;
   }
   *alloc_addr = old_sbrk;
 #ifdef DEBUG_MM
-    print_pgtbl(caller, caller->mm->mmap->vm_start, caller->mm->mmap->vm_end);
+  print_pgtbl(caller, caller->mm->mmap->vm_start, caller->mm->mmap->vm_end);
 #endif
   return 0;
 }
@@ -159,7 +164,7 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
 
   /*enlist the obsoleted memory region */
   enlist_vm_freerg_list(caller->mm, rgnode);
-  printf("free region %ld %ld \n", caller->mm->mmap->vm_freerg_list->rg_start, caller->mm->mmap->vm_freerg_list->rg_end);
+  printf("free region: %ld %ld \n", caller->mm->mmap->vm_freerg_list->rg_start, caller->mm->mmap->vm_freerg_list->rg_end);
   return 0;
 }
 
@@ -198,118 +203,127 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller, in
 {
   uint32_t tlb_pte;
   // if in TLB
-  if(tlb_cache_read(caller->tlb, caller->pid, pgn, &tlb_pte) == 0){
+  if (tlb_cache_read(caller->tlb, caller->pid, pgn, &tlb_pte) == 0)
+  {
     // if not in RAM
     *frmnum = 0;
-    if (!PAGING_PAGE_PRESENT(tlb_pte)){ 
+    if (!PAGING_PAGE_PRESENT(tlb_pte))
+    {
       /* Page is not online, make it actively living */
-        int vicpgn, swpfpn, emptyfpn;
+      int vicpgn, swpfpn, emptyfpn;
       // int vicfpn;
       // uint32_t vicpte;
       // int tgtfpn = PAGING_SWP(pte);
-        int tgtfpn = PAGING_FPN(tlb_pte); // the target frame storing our variable
-        //if RAM has space
-        if(MEMPHY_get_freefp(caller->mram, &emptyfpn) == 0){
-          __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, emptyfpn);
-          MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
-          // update the pgd
-          pte_set_fpn(&caller->mm->pgd[pgn], emptyfpn);
+      int tgtfpn = PAGING_FPN(tlb_pte); // the target frame storing our variable
+      // if RAM has space
+      if (MEMPHY_get_freefp(caller->mram, &emptyfpn) == 0)
+      {
+        __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, emptyfpn);
+        MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
+        // update the pgd
+        pte_set_fpn(&caller->mm->pgd[pgn], emptyfpn);
 #ifdef CPU_TLB
         // after being pushed to RAM, update the TLB
         // because just 1 page is edited
-          tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+        tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
 #endif
-        }
+      }
       // RAM has no spaces
-        else{
+      else
+      {
         /* TODO: Play with your paging theory here */
         /* Find victim page */
-          find_victim_page(caller->mm, &vicpgn);
-          int vicfpn = PAGING_FPN(caller->mm->pgd[vicpgn]);
+        find_victim_page(caller->mm, &vicpgn);
+        int vicfpn = PAGING_FPN(caller->mm->pgd[vicpgn]);
         /* Get free frame in MEMSWP */
-          MEMPHY_get_freefp(caller->active_mswp, &swpfpn);
+        MEMPHY_get_freefp(caller->active_mswp, &swpfpn);
 
         /* Do swap frame from MEMRAM to MEMSWP and vice versa*/
         /* Copy victim frame to swap */
-          __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
+        __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
         /* Copy target frame from swap to mem */
-          __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
+        __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
 
         /* Update page table */
-          pte_set_swap_fpn(&caller->mm->pgd[vicpgn], swpfpn) ;
+        pte_set_swap_fpn(&caller->mm->pgd[vicpgn], swpfpn);
         // &mm->pgd;
 
         /* Update its online status of the target page */
-          pte_set_fpn(&caller->mm->pgd[pgn], vicfpn) ;
+        pte_set_fpn(&caller->mm->pgd[pgn], vicfpn);
         // & mm->pgd[pgn];
         // pte_set_fpn(&pte, tgtfpn);
-          MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
-    #ifdef CPU_TLB
+        MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
+#ifdef CPU_TLB
         /* Update its online status of TLB (if needed) */
         uint32_t pte_check;
-        if(tlb_cache_read(caller->tlb, caller->pid, vicpgn, &pte_check) == 0){
+        if (tlb_cache_read(caller->tlb, caller->pid, vicpgn, &pte_check) == 0)
+        {
           tlb_cache_write(caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
         }
         tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
-    #endif
-        }
-          enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
+#endif
       }
+      enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
     }
-    // not in TLB
-  else{
+  }
+  // not in TLB
+  else
+  {
     uint32_t pte = mm->pgd[pgn];
-    if (!PAGING_PAGE_PRESENT(pte)){ 
+    if (!PAGING_PAGE_PRESENT(pte))
+    {
       /* Page is not online, make it actively living */
-      int vicpgn, swpfpn,emptyfpn;
+      int vicpgn, swpfpn, emptyfpn;
       // int vicfpn;
       // uint32_t vicpte;
       // int tgtfpn = PAGING_SWP(pte); // the target frame storing our variable
       int tgtfpn = PAGING_FPN(pte);
-      if(MEMPHY_get_freefp(caller->mram, &emptyfpn) == 0){
+      if (MEMPHY_get_freefp(caller->mram, &emptyfpn) == 0)
+      {
         __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, emptyfpn);
         MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
         pte_set_fpn(&caller->mm->pgd[pgn], emptyfpn);
-  #ifdef CPU_TLB
+#ifdef CPU_TLB
         tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
-  #endif
+#endif
       }
-      else{
-      /* TODO: Play with your paging theory here */
-      /* Find victim page */
+      else
+      {
+        /* TODO: Play with your paging theory here */
+        /* Find victim page */
         find_victim_page(caller->mm, &vicpgn);
         int vicfpn = PAGING_FPN(caller->mm->pgd[vicpgn]);
-      /* Get free frame in MEMSWP */
+        /* Get free frame in MEMSWP */
         MEMPHY_get_freefp(caller->active_mswp, &swpfpn);
-      /* Do swap frame from MEMRAM to MEMSWP and vice versa*/
-      /* Copy victim frame to swap */
+        /* Do swap frame from MEMRAM to MEMSWP and vice versa*/
+        /* Copy victim frame to swap */
         __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
-      /* Copy target frame from swap to mem */
+        /* Copy target frame from swap to mem */
         __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
 
-      /* Update page table */
-        pte_set_swap_fpn(&caller->mm->pgd[vicpgn], swpfpn) ;
-      // &mm->pgd;
-      /* Update its online status of the target page */
-        pte_set_fpn(&caller->mm->pgd[pgn], vicfpn) ;
-      // & mm->pgd[pgn];
-      // pte_set_fpn(&pte, tgtfpn);
+        /* Update page table */
+        pte_set_swap_fpn(&caller->mm->pgd[vicpgn], swpfpn);
+        // &mm->pgd;
+        /* Update its online status of the target page */
+        pte_set_fpn(&caller->mm->pgd[pgn], vicfpn);
+        // & mm->pgd[pgn];
+        // pte_set_fpn(&pte, tgtfpn);
         MEMPHY_put_freefp(caller->active_mswp, tgtfpn);
-  #ifdef CPU_TLB
-      /* Update its online status of TLB (if needed) */
-      uint32_t pte_check;
-      if(tlb_cache_read(caller->tlb, caller->pid, vicpgn, &pte_check) == 0){
-        tlb_cache_write(caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
+#ifdef CPU_TLB
+        /* Update its online status of TLB (if needed) */
+        uint32_t pte_check;
+        if (tlb_cache_read(caller->tlb, caller->pid, vicpgn, &pte_check) == 0)
+        {
+          tlb_cache_write(caller->tlb, caller->pid, vicpgn, caller->mm->pgd[vicpgn]);
+        }
+        tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
+#endif
       }
-      tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
-  #endif
-      }
-        enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
+      enlist_pgn_node(&caller->mm->fifo_pgn, pgn);
     }
     tlb_cache_write(caller->tlb, caller->pid, pgn, caller->mm->pgd[pgn]);
-   
   }
-   *fpn = PAGING_FPN(caller->tlb->tlb_entries[pgn].pte);
+  *fpn = PAGING_FPN(caller->tlb->tlb_entries[pgn].pte);
   return 0;
 }
 
@@ -389,7 +403,7 @@ int pgread(
 {
   BYTE data;
   int frmnum;
-  int val = __read(proc, 0, source, offset, &data,&frmnum);
+  int val = __read(proc, 0, source, offset, &data, &frmnum);
 
   destination = (uint32_t)data;
 #ifdef IODUMP
@@ -411,14 +425,14 @@ int pgread(
  *@size: allocated size
  *
  */
-int __write(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE value, int* frmnum)
+int __write(struct pcb_t *caller, int vmaid, int rgid, int offset, BYTE value, int *frmnum)
 {
   struct vm_rg_struct *currg = get_symrg_byid(caller->mm, rgid);
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
 
   if (currg == NULL || cur_vma == NULL) /* Invalid memory identify */
     return -1;
-  
+
   pg_setval(caller->mm, currg->rg_start + offset, value, caller, frmnum);
 
   return 0;
@@ -520,10 +534,9 @@ int inc_vma_limit(struct pcb_t *caller, int vmaid, int inc_sz)
   struct vm_rg_struct *newrg = malloc(sizeof(struct vm_rg_struct));
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
   int inc_amt = PAGING_PAGE_ALIGNSZ(inc_sz - (cur_vma->vm_end - cur_vma->sbrk));
-  
+
   int incnumpage = inc_amt / PAGING_PAGESZ;
   struct vm_rg_struct *area = get_vm_area_node_at_brk(caller, vmaid, inc_sz, inc_amt);
-  
 
   int old_end = cur_vma->vm_end;
 
@@ -553,7 +566,8 @@ int find_victim_page(struct mm_struct *mm, int *retpgn)
   struct pgn_t *pg = mm->fifo_pgn;
 
   /* TODO: Implement the theorical mechanism to find the victim page */
-  if(pg == NULL){
+  if (pg == NULL)
+  {
     *retpgn = -1;
     free(pg);
     return -1;
@@ -581,7 +595,8 @@ int get_free_vmrg_area(struct pcb_t *caller, int vmaid, int size, struct vm_rg_s
   }
 
   struct vm_rg_struct *rgit = cur_vma->vm_freerg_list;
-  if (rgit == NULL){
+  if (rgit == NULL)
+  {
     return -1;
   }
   /* Probe unintialized newrg */
@@ -592,7 +607,7 @@ int get_free_vmrg_area(struct pcb_t *caller, int vmaid, int size, struct vm_rg_s
   {
     if (rgit->rg_start + size <= rgit->rg_end)
     { /* Current region has enough space */
-      
+
       newrg->rg_start = rgit->rg_start;
       newrg->rg_end = rgit->rg_start + size;
       // printf("rg_start %lu, rg_end %lu", newrg->rg_start ,newrg->rg_end);

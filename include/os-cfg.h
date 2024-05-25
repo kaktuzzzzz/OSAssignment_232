@@ -7,7 +7,7 @@
 #define CPU_TLB
 #define CPUTLB_FIXED_TLBSZ
 #define MM_PAGING
-#define DEBUG_MM 1
+// #define DEBUG_MM 1
 //#define MM_FIXED_MEMSZ
 //#define VMDBG 1
 //#define MMDBG 1
